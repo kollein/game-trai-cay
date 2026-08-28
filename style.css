@@ -1,0 +1,130 @@
+﻿@font-face {
+    font-family: "Arial Rounded MT";
+    src: url(assets/arial-rounded-mt-bold.ttf) format("truetype");
+    font-weight: 400;
+    font-style: normal;
+}
+*, body, button, input, textarea, select {
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    box-sizing: border-box;
+}
+html, body {
+    font-family: "Arial Rounded MT", sans-serif;
+    -webkit-text-size-adjust: 100%;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    background: #000;
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: none;
+}
+h1, h2, h3, h4, h5, h6, p, span, li, ul, ol, fieldset, label, textarea, button, table, td, tr, input {
+    margin: 0;
+    padding: 0;
+    outline: 0;
+    text-align: left;
+}
+button, li { cursor: pointer; }
+
+#stage {
+    position: fixed;
+    inset: 0;
+    overflow: hidden;
+    background: #000;
+}
+
+#machineCustom {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 480px;
+    height: 800px;
+    margin-left: -240px;
+    margin-top: -400px;
+    transform-origin: center center;
+    background: url(assets/480/machine1_bg.png);
+}
+
+#machineCustom .controllBet {
+    position: absolute;
+    top: 560px;
+    width: 480px;
+    height: 240px;
+    z-index: 4;
+}
+
+#itemLIGHT {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 480px;
+    height: 800px;
+    pointer-events: none;
+    z-index: 2;
+}
+
+.controllBet .imgGlobal {
+    position: absolute;
+    cursor: pointer;
+    touch-action: manipulation;
+}
+
+#machineCustom .seriesGlobal,
+#machineCustom .itemGlobal,
+#machineCustom .seriesBox {
+    position: absolute;
+}
+
+.seriesBox {
+    left: 0;
+    top: 0;
+    width: 480px;
+    height: 800px;
+    z-index: 3;
+    pointer-events: none;
+}
+
+.fruit-light { display: none; }
+.fruit-light.is-on { display: block; }
+
+.odds-light { opacity: 0.9; }
+.odds-light.is-win {
+    opacity: 1;
+    filter: brightness(1.45);
+    animation: oddsPulse 0.35s infinite alternate;
+}
+
+@keyframes oddsPulse {
+    from { filter: brightness(1.1); }
+    to { filter: brightness(1.7); }
+}
+
+#hud {
+    position: absolute;
+    right: 8px;
+    top: 8px;
+    z-index: 6;
+    display: flex;
+    gap: 6px;
+}
+
+#hud button {
+    background: rgba(0, 0, 0, 0.55);
+    color: #ffe27a;
+    border: 1px solid rgba(255, 210, 80, 0.65);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-size: 12px;
+    font-family: inherit;
+    cursor: pointer;
+    touch-action: manipulation;
+}
+
+#hud button:active {
+    transform: translateY(1px);
+    background: rgba(0, 0, 0, 0.75);
+}
