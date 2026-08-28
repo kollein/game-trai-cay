@@ -8,6 +8,8 @@ window.AudioPool = (function () {
   var unlocked = false;
   var looping = null;
   var bgm = null;
+  var tourCh = [];
+  var tourFlip = 0;
   var rr = 0;
 
   function createEl() {
@@ -22,6 +24,7 @@ window.AudioPool = (function () {
     for (i = 0; i < POOL_SIZE; i++) {
       pool.push(createEl());
     }
+    tourCh = [createEl(), createEl()];
   }
 
   function unlock() {
@@ -29,7 +32,7 @@ window.AudioPool = (function () {
       return;
     }
     unlocked = true;
-    pool.forEach(function (ch) {
+    function unlockEl(ch) {
       ch.muted = true;
       var p = ch.play();
       if (p && p.then) {
@@ -42,7 +45,9 @@ window.AudioPool = (function () {
       } else {
         ch.muted = muted;
       }
-    });
+    }
+    pool.forEach(unlockEl);
+    tourCh.forEach(unlockEl);
   }
 
   function play(file, loop) {
@@ -61,6 +66,47 @@ window.AudioPool = (function () {
       return;
     }
     startChannel(pool[POOL_SIZE - 1], file, !!loop, true);
+  }
+
+  function playTour(file, loop) {
+    var next;
+    var prev;
+    if (!file) {
+      return;
+    }
+    unlock();
+    if (muted) {
+      return;
+    }
+    next = tourCh[tourFlip];
+    prev = tourCh[1 - tourFlip];
+    tourFlip = 1 - tourFlip;
+    next.loop = !!loop;
+    next.muted = muted;
+    next.src = SRC + file + '.ogg';
+    try {
+      next.currentTime = 0;
+    } catch (err) {}
+    var playPromise = next.play();
+    if (playPromise && playPromise.catch) {
+      playPromise.catch(function () {});
+    }
+    bgm = next;
+    looping = loop ? next : null;
+    if (prev && prev !== next) {
+      setTimeout(function () {
+        if (bgm !== prev) {
+          pauseChannel(prev);
+        }
+      }, 50);
+    }
+  }
+
+  function preload(files) {
+    (files || []).forEach(function (file) {
+      var el = createEl();
+      el.src = SRC + file + '.ogg';
+    });
   }
 
   function pickChannel(loop) {
@@ -136,11 +182,17 @@ window.AudioPool = (function () {
     for (i = 0; i < pool.length; i++) {
       pauseChannel(pool[i]);
     }
+    for (i = 0; i < tourCh.length; i++) {
+      pauseChannel(tourCh[i]);
+    }
   }
 
   function setMuted(value) {
     muted = !!value;
     pool.forEach(function (ch) {
+      ch.muted = muted;
+    });
+    tourCh.forEach(function (ch) {
       ch.muted = muted;
     });
     if (muted) {
@@ -152,6 +204,8 @@ window.AudioPool = (function () {
     init: init,
     play: play,
     playBgm: playBgm,
+    playTour: playTour,
+    preload: preload,
     stopLoop: stopLoop,
     stopBgm: stopBgm,
     stopAll: stopAll,

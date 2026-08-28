@@ -53,7 +53,18 @@ window.Game = (function () {
     LUCKY: 'Y112-1_e'
   };
 
-  var TOUR = ['Y021', 'Y022', 'Y023', 'Y024', 'Y025', 'Y026', 'Y027', 'Y028', 'Y029', 'Y030'];
+  var TOUR_START = [
+    { file: 'Y021', ms: 1512 },
+    { file: 'Y022', ms: 1584 },
+    { file: 'Y023', ms: 1624 },
+    { file: 'Y024', ms: 1684 },
+    { file: 'Y025', ms: 1632 },
+    { file: 'Y026', ms: 1608 },
+    { file: 'Y027', ms: 1714 },
+    { file: 'Y028', ms: 1560 }
+  ];
+  var TOUR_FAST = { file: 'Y029', ms: 309 };
+  var TOUR_END = { file: 'Y030', ms: 1320 };
   var FINISH = ['C01', 'C02', 'C03', 'C04', 'C05', 'C06', 'C07', 'C08', 'C09', 'C10', 'C11', 'C12', 'C13', 'C14', 'C15'];
 
   var LIMIT_BET = 10;
@@ -513,53 +524,81 @@ window.Game = (function () {
     }
   }
 
-  function stepDelay(step, total) {
-    var t = step / Math.max(total, 1);
+  function delaysForPhase(count, fromMs, toMs, totalMs) {
+    var i;
+    var t;
+    var raw = [];
+    var out = [];
+    var sum = 0;
+    var scale;
     var d;
-    var u;
-    if (t < 0.12) {
-      d = 170 - (t / 0.12) * 110;
-    } else if (t < 0.75) {
-      d = 30;
-    } else {
-      u = (t - 0.75) / 0.25;
-      d = 30 + u * u * 210;
+    var rest;
+    if (count <= 0) {
+      return [];
     }
-    return Math.max(24, d);
+    for (i = 0; i < count; i++) {
+      t = count === 1 ? 1 : i / (count - 1);
+      d = fromMs + (toMs - fromMs) * t;
+      raw.push(d);
+      sum += d;
+    }
+    scale = totalMs / Math.max(sum, 1);
+    sum = 0;
+    for (i = 0; i < count - 1; i++) {
+      d = Math.max(16, raw[i] * scale);
+      out.push(d);
+      sum += d;
+    }
+    rest = totalMs - sum;
+    out.push(Math.max(16, rest));
+    return out;
   }
 
-  function animateWheel(from, totalSteps, target, done) {
+  function animateWheel(from, target, done) {
+    var start = TOUR_START[randomInt(0, TOUR_START.length - 1)];
+    var n1 = 12;
+    var n3 = 16;
+    var remainder = ((target - from - n1 - n3) % 24 + 24) % 24;
+    var n2 = 5 * 24 + remainder;
+    var fastDelays = [];
+    var i;
+    for (i = 0; i < n2; i++) {
+      fastDelays.push(28);
+    }
+    var delays = delaysForPhase(n1, 150, 42, start.ms)
+      .concat(fastDelays)
+      .concat(delaysForPhase(n3, 42, 175, TOUR_END.ms));
+    var totalSteps = delays.length;
     var step = 0;
     var last = 0;
     var acc = 0;
     var soundPhase = 'start';
-    window.AudioPool.play(TOUR[randomInt(0, 7)]);
+
+    window.AudioPool.playTour(start.file, false);
+
     function frame(now) {
       var need;
       var idx;
-      var t;
       if (!last) {
         last = now;
       }
       acc += now - last;
       last = now;
-      need = stepDelay(step, totalSteps);
+      need = delays[Math.min(step, totalSteps - 1)];
       while (acc >= need && step < totalSteps) {
         acc -= need;
         step += 1;
         idx = (from + step) % 24;
         state.wheelIndex = idx;
         window.UI.setLights([idx]);
-        t = step / totalSteps;
-        if (soundPhase === 'start' && t >= 0.12) {
+        if (soundPhase === 'start' && step >= n1 - 1) {
           soundPhase = 'fast';
-          window.AudioPool.play('Y029', true);
-        } else if (soundPhase === 'fast' && t >= 0.75) {
+          window.AudioPool.playTour(TOUR_FAST.file, true);
+        } else if (soundPhase === 'fast' && step >= n1 + n2) {
           soundPhase = 'end';
-          window.AudioPool.stopLoop();
-          window.AudioPool.play('Y030');
+          window.AudioPool.playTour(TOUR_END.file, false);
         }
-        need = stepDelay(step, totalSteps);
+        need = delays[Math.min(step, totalSteps - 1)];
       }
       if (step < totalSteps) {
         state.raf = requestAnimationFrame(frame);
@@ -576,9 +615,6 @@ window.Game = (function () {
   function startSpin() {
     var from;
     var target;
-    var laps;
-    var offset;
-    var totalSteps;
     if (state.phase !== 'idle') {
       return;
     }
@@ -597,14 +633,8 @@ window.Game = (function () {
     setPhase('spinning');
     from = state.wheelIndex;
     target = randomInt(0, 23);
-    laps = randomInt(4, 6);
-    offset = (target - from + 24) % 24;
-    totalSteps = laps * 24 + offset;
-    if (totalSteps < 24) {
-      totalSteps += 24;
-    }
     window.UI.clearLights();
-    animateWheel(from, totalSteps, target, onSpinLand);
+    animateWheel(from, target, onSpinLand);
   }
 
   function pressGo() {
@@ -686,6 +716,10 @@ window.Game = (function () {
     state.wheelIndex = randomInt(0, 23);
     state.phase = 'idle';
     window.AudioPool.init();
+    window.AudioPool.preload(
+      TOUR_START.map(function (item) { return item.file; })
+        .concat([TOUR_FAST.file, TOUR_END.file])
+    );
     window.AudioPool.setMuted(state.muted);
     window.UI.init();
     window.UI.renderAll(state);
