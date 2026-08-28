@@ -240,6 +240,26 @@ window.Game = (function () {
     return true;
   }
 
+  function clearBet(fruit) {
+    var cur;
+    if (state.phase !== 'idle') {
+      return false;
+    }
+    if (FRUITS.indexOf(fruit) === -1) {
+      return false;
+    }
+    cur = state.bets[fruit] || 0;
+    if (cur <= 0) {
+      return false;
+    }
+    state.bets[fruit] = 0;
+    state.credits = clamp(state.credits + cur, 0, MAX_CREDIT);
+    window.UI.renderCredits(state.credits);
+    window.UI.renderBet(fruit, 0);
+    persist();
+    return true;
+  }
+
   function allPlus(delta) {
     var i;
     var any = false;
@@ -625,6 +645,12 @@ window.Game = (function () {
       return;
     }
     if (FRUITS.indexOf(id) !== -1) {
+      if ((state.bets[id] || 0) >= LIMIT_BET) {
+        if (clearBet(id)) {
+          window.AudioPool.play(BET_SOUND[id]);
+        }
+        return;
+      }
       if (changeBet(id, 1)) {
         window.AudioPool.play(BET_SOUND[id]);
       }
