@@ -192,9 +192,18 @@ window.Game = (function () {
     var idle = state.phase === 'idle';
     var collect = state.phase === 'gamble';
     var canMove = idle || collect;
-    window.UI.setEnabled('go', collect || (idle && totalBet() > 0 && state.credits > 0));
+    window.UI.setEnabled('go', collect || (idle && canCoverStake()));
     window.UI.setEnabled('leftBonus', canMove && state.credits > 0);
     window.UI.setEnabled('rightBonus', canMove && state.bonus > 0);
+  }
+
+  function neededStake() {
+    return totalBet();
+  }
+
+  function canCoverStake() {
+    var need = neededStake();
+    return need > 0 && (state.credits + state.bonus) >= need;
   }
 
   function computeWin(indices) {
@@ -241,21 +250,18 @@ window.Game = (function () {
     }
     cur = state.bets[fruit] || 0;
     if (delta > 0) {
-      if (cur >= LIMIT_BET || state.credits < 1) {
+      if (cur >= LIMIT_BET || totalBet() + 1 > state.credits) {
         return false;
       }
       state.bets[fruit] = cur + 1;
-      state.credits -= 1;
     } else if (delta < 0) {
       if (cur <= 0) {
         return false;
       }
       state.bets[fruit] = cur - 1;
-      state.credits += 1;
     } else {
       return false;
     }
-    window.UI.renderCredits(state.credits);
     window.UI.renderBet(fruit, state.bets[fruit]);
     persist();
     refreshControls();
@@ -275,8 +281,6 @@ window.Game = (function () {
       return false;
     }
     state.bets[fruit] = 0;
-    state.credits = clamp(state.credits + cur, 0, MAX_CREDIT);
-    window.UI.renderCredits(state.credits);
     window.UI.renderBet(fruit, 0);
     persist();
     refreshControls();
@@ -293,7 +297,7 @@ window.Game = (function () {
       if (changeBet(FRUITS[i], delta)) {
         any = true;
       }
-      if (delta > 0 && state.credits < 1) {
+      if (delta > 0 && totalBet() >= state.credits) {
         break;
       }
     }
@@ -658,7 +662,7 @@ window.Game = (function () {
     if (state.phase !== 'idle') {
       return;
     }
-    if (state.credits < 1 || totalBet() <= 0) {
+    if (totalBet() <= 0) {
       window.AudioPool.play('Y016');
       return;
     }
@@ -677,13 +681,50 @@ window.Game = (function () {
     animateWheel(from, target, onSpinLand);
   }
 
+  function ensureStakeThenSpin() {
+    var need = neededStake();
+    var take;
+    var bonusFrom;
+    var creditFrom;
+    var ms;
+    if (state.phase !== 'idle') {
+      return;
+    }
+    if (need <= 0 || state.credits + state.bonus < need) {
+      window.AudioPool.play('Y016');
+      return;
+    }
+    if (state.credits < need) {
+      take = need - state.credits;
+      bonusFrom = state.bonus;
+      creditFrom = state.credits;
+      state.bonus -= take;
+      state.credits += take;
+      persist();
+      ms = clamp(280 + take * 4, 280, 520);
+      setPhase('payout');
+      playCoinIntoBonus(clamp(Math.ceil(take / 6), 2, 5), ms);
+      window.UI.animateNumber('bonus', bonusFrom, state.bonus, ms, window.UI.renderBonus);
+      window.UI.animateNumber('credit', creditFrom, state.credits, ms, window.UI.renderCredits);
+      later(function () {
+        setPhase('idle');
+      }, ms + 30);
+      return;
+    }
+    state.credits -= need;
+    persist();
+    refreshControls();
+    window.UI.renderCredits(state.credits);
+    startSpin();
+  }
+
   function pressGo() {
     window.AudioPool.unlock();
     hushFinishMusic();
-    if (state.phase === 'idle') {
-      startSpin();
-    } else if (state.phase === 'gamble') {
+    if (state.phase === 'gamble') {
       collectWin();
+    } else if (state.phase === 'idle') {
+      ensureStakeThenSpin();
     }
   }
 
@@ -730,7 +771,7 @@ window.Game = (function () {
       return;
     }
     if (id === 'allplus1') {
-      if (button !== 2 && state.credits < 1) {
+      if (button !== 2 && totalBet() >= state.credits) {
         window.AudioPool.play('Y016');
         return;
       }
@@ -749,7 +790,7 @@ window.Game = (function () {
         }
         return;
       }
-      if (state.credits < 1) {
+      if (totalBet() >= state.credits) {
         window.AudioPool.play('Y016');
         return;
       }
