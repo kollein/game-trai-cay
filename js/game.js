@@ -514,6 +514,34 @@ window.Game = (function () {
     state.raf = requestAnimationFrame(frame);
   }
 
+  function isSmallX3(index) {
+    return CELL_ODDS[index] === 3;
+  }
+
+  function shouldTriggerHu(index) {
+    if (WHEEL[index] === 'LUCKY') {
+      return true;
+    }
+    if (isSmallX3(index)) {
+      return false;
+    }
+    return randomInt(1, 100) <= 30;
+  }
+
+  function roaringTheGO(index) {
+    setPhase('shooting');
+    state.hitIndices = [index];
+    window.UI.setLights([index]);
+    if (randomInt(0, 1) === 0) {
+      window.AudioPool.play(randomInt(0, 1) === 0 ? 'Y016' : 'Y017');
+      later(function () {
+        payout([index]);
+      }, 700);
+      return;
+    }
+    startLuckyShoot(index);
+  }
+
   function runShot(from, total, doneCount) {
     var fly;
     if (doneCount >= total) {
@@ -540,29 +568,31 @@ window.Game = (function () {
   }
 
   function startLuckyShoot(origin) {
+    var name = WHEEL[origin];
     setPhase('shooting');
     state.hitIndices = [origin];
     window.UI.setLights([origin]);
-    window.AudioPool.play('Y112-1_e');
+    if (RESULT_SOUND[name]) {
+      window.AudioPool.play(RESULT_SOUND[name]);
+    }
     later(function () {
       window.AudioPool.play('Y002');
       later(function () {
         window.AudioPool.play('Y005');
         later(function () {
-          runShot(origin, randomInt(1, 2), 0);
+          runShot(origin, randomInt(1, 3), 0);
         }, 832);
       }, 311);
     }, 400);
   }
 
   function onSpinLand(index) {
-    var name = WHEEL[index];
     window.AudioPool.stopLoop();
     state.wheelIndex = index;
     state.hitIndices = [index];
     window.UI.setLights([index]);
-    if (name === 'LUCKY') {
-      startLuckyShoot(index);
+    if (shouldTriggerHu(index)) {
+      roaringTheGO(index);
     } else {
       payout([index]);
     }
