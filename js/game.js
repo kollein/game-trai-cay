@@ -338,6 +338,7 @@ window.Game = (function () {
     state.bonus = clamp(state.bonus + gain, 0, MAX_CREDIT);
     state.lastWin = gain;
     state.pendingWin = 0;
+    window.AudioPool.stopBgm();
     window.AudioPool.play('C01');
     window.UI.renderCredits(state.credits);
     window.UI.renderBonus(state.bonus);
@@ -401,7 +402,7 @@ window.Game = (function () {
     }
     window.UI.animateNumber(0, win, 480, window.UI.renderResult);
     later(function () {
-      window.AudioPool.play(FINISH[randomInt(0, FINISH.length - 1)]);
+      window.AudioPool.playBgm(FINISH[randomInt(0, FINISH.length - 1)]);
       if (win > 0) {
         setPhase('gamble');
       } else {
@@ -567,6 +568,7 @@ window.Game = (function () {
     }
     stopHold();
     clearAllTimers();
+    window.AudioPool.stopAll();
     stopBlink();
     window.UI.clearOddsWin();
     state.lastWin = 0;
@@ -587,6 +589,7 @@ window.Game = (function () {
 
   function pressGo() {
     window.AudioPool.unlock();
+    window.AudioPool.stopAll();
     if (state.phase === 'idle') {
       startSpin();
     } else if (state.phase === 'gamble') {

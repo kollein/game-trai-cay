@@ -7,6 +7,7 @@ window.AudioPool = (function () {
   var muted = false;
   var unlocked = false;
   var looping = null;
+  var bgm = null;
   var rr = 0;
 
   function createEl() {
@@ -52,39 +53,89 @@ window.AudioPool = (function () {
     if (muted) {
       return;
     }
-    var ch;
-    if (loop) {
-      ch = pool[POOL_SIZE - 1];
-      if (looping && looping !== ch) {
-        looping.loop = false;
-        looping.pause();
-      }
-      looping = ch;
-      ch.loop = true;
-    } else {
-      ch = pool[rr % (POOL_SIZE - 1)];
-      rr += 1;
-      ch.loop = false;
-      if (looping === ch) {
-        looping = null;
-      }
+    startChannel(pickChannel(!!loop), file, !!loop, !!loop);
+  }
+
+  function playBgm(file, loop) {
+    if (!file) {
+      return;
     }
+    startChannel(pool[POOL_SIZE - 1], file, !!loop, true);
+  }
+
+  function pickChannel(loop) {
+    if (loop) {
+      return pool[POOL_SIZE - 1];
+    }
+    var ch = pool[rr % (POOL_SIZE - 1)];
+    rr += 1;
+    return ch;
+  }
+
+  function pauseChannel(ch) {
+    if (!ch) {
+      return;
+    }
+    ch.loop = false;
+    try {
+      ch.pause();
+    } catch (err) {}
+    try {
+      ch.currentTime = 0;
+    } catch (err) {}
+  }
+
+  function startChannel(ch, file, loop, isBgm) {
+    unlock();
+    if (muted) {
+      return;
+    }
+    if (isBgm && bgm && bgm !== ch) {
+      pauseChannel(bgm);
+    }
+    if (looping && looping !== ch) {
+      pauseChannel(looping);
+    }
+    ch.loop = !!loop;
     ch.muted = muted;
     ch.src = SRC + file + '.ogg';
-    ch.currentTime = 0;
+    try {
+      ch.currentTime = 0;
+    } catch (err) {}
+    if (isBgm || loop) {
+      bgm = ch;
+    }
+    looping = loop ? ch : (looping === ch ? null : looping);
     var playPromise = ch.play();
     if (playPromise && playPromise.catch) {
       playPromise.catch(function () {});
     }
   }
 
-  function stopLoop() {
-    if (!looping) {
-      return;
+  function stopBgm() {
+    pauseChannel(bgm);
+    if (looping === bgm) {
+      looping = null;
     }
-    looping.loop = false;
-    looping.pause();
+    bgm = null;
+  }
+
+  function stopLoop() {
+    pauseChannel(looping);
+    if (bgm === looping) {
+      bgm = null;
+    }
     looping = null;
+    stopBgm();
+  }
+
+  function stopAll() {
+    var i;
+    looping = null;
+    bgm = null;
+    for (i = 0; i < pool.length; i++) {
+      pauseChannel(pool[i]);
+    }
   }
 
   function setMuted(value) {
@@ -93,14 +144,17 @@ window.AudioPool = (function () {
       ch.muted = muted;
     });
     if (muted) {
-      stopLoop();
+      stopAll();
     }
   }
 
   return {
     init: init,
     play: play,
+    playBgm: playBgm,
     stopLoop: stopLoop,
+    stopBgm: stopBgm,
+    stopAll: stopAll,
     setMuted: setMuted,
     isMuted: function () { return muted; },
     unlock: unlock
