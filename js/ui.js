@@ -310,18 +310,50 @@ window.UI = (function () {
     tweenRafs[id] = requestAnimationFrame(frame);
   }
 
+  function setLightOpacity(i, opacity) {
+    var el = $('childITEM' + i);
+    var v;
+    if (!el) {
+      return;
+    }
+    v = opacity > 0.02 ? opacity : 0;
+    el.style.opacity = String(v);
+    el.classList.toggle('is-on', v > 0);
+  }
+
   function setLights(indices) {
     var on = {};
     var i;
-    var el;
     (indices || []).forEach(function (idx) {
       on[idx] = true;
     });
     for (i = 0; i < 24; i++) {
-      el = $('childITEM' + i);
-      if (el) {
-        el.classList.toggle('is-on', !!on[i]);
+      setLightOpacity(i, on[i] ? 1 : 0);
+    }
+  }
+
+  function setComet(head, tail, strength) {
+    var ops = [];
+    var i;
+    var k;
+    var idx;
+    var fade;
+    var s = Math.max(0, Math.min(1, strength));
+    for (i = 0; i < 24; i++) {
+      ops[i] = 0;
+    }
+    if (head >= 0 && head < 24) {
+      ops[head] = 1;
+    }
+    for (k = 1; k <= tail; k++) {
+      idx = (head - k + 24) % 24;
+      fade = Math.max(0.2, Math.pow(0.8, k));
+      if (ops[idx] < s * fade) {
+        ops[idx] = s * fade;
       }
+    }
+    for (i = 0; i < 24; i++) {
+      setLightOpacity(i, ops[i]);
     }
   }
 
@@ -471,6 +503,7 @@ window.UI = (function () {
     animateNumber: animateNumber,
     cancelTween: cancelTween,
     setLights: setLights,
+    setComet: setComet,
     clearLights: clearLights,
     setOddsWin: setOddsWin,
     clearOddsWin: clearOddsWin,

@@ -617,12 +617,30 @@ window.Game = (function () {
     var last = 0;
     var acc = 0;
     var soundPhase = 'start';
+    var head = from;
+    var trailFadeAt = 0;
+    var TRAIL = 6;
 
     window.AudioPool.playTour(start.file, false);
+    window.UI.setLights([head]);
+
+    function cometStrength(now) {
+      var p;
+      if (soundPhase !== 'end') {
+        return 1;
+      }
+      if (!trailFadeAt) {
+        trailFadeAt = now;
+      }
+      p = Math.min(1, (now - trailFadeAt) / 520);
+      p = p * p * (3 - 2 * p);
+      return 1 - p;
+    }
 
     function frame(now) {
       var need;
       var idx;
+      var strength;
       if (!last) {
         last = now;
       }
@@ -633,16 +651,25 @@ window.Game = (function () {
         acc -= need;
         step += 1;
         idx = (from + step) % 24;
+        head = idx;
         state.wheelIndex = idx;
-        window.UI.setLights([idx]);
         if (soundPhase === 'start' && step >= n1 - 1) {
           soundPhase = 'fast';
           window.AudioPool.playTour(TOUR_FAST.file, true);
         } else if (soundPhase === 'fast' && step >= n1 + n2) {
           soundPhase = 'end';
+          if (!trailFadeAt) {
+            trailFadeAt = now;
+          }
           window.AudioPool.playTour(TOUR_END.file, false);
         }
         need = delays[Math.min(step, totalSteps - 1)];
+      }
+      strength = cometStrength(now);
+      if (strength > 0.02) {
+        window.UI.setComet(head, Math.min(TRAIL, step), strength);
+      } else {
+        window.UI.setLights([head]);
       }
       if (step < totalSteps) {
         state.raf = requestAnimationFrame(frame);
