@@ -379,6 +379,9 @@ window.UI = (function () {
         return;
       }
       e.preventDefault();
+      if (handlers.onAnyDown) {
+        handlers.onAnyDown(btn.id);
+      }
       if (!enabled[btn.id]) {
         return;
       }
@@ -407,6 +410,9 @@ window.UI = (function () {
 
     if (btnCoin) {
       btnCoin.addEventListener('click', function () {
+        if (handlers.onAnyDown) {
+          handlers.onAnyDown('btnCoin');
+        }
         if (handlers.onCoin) {
           handlers.onCoin();
         }
@@ -414,6 +420,9 @@ window.UI = (function () {
     }
     if (btnMute) {
       btnMute.addEventListener('click', function () {
+        if (handlers.onAnyDown) {
+          handlers.onAnyDown('btnMute');
+        }
         if (handlers.onMute) {
           handlers.onMute();
         }

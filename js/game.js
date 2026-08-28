@@ -384,6 +384,24 @@ window.Game = (function () {
     return clamp(450 + Math.abs(amount) * 4, 450, 1000);
   }
 
+  function hushFinishMusic() {
+    if (state.phase === 'spinning' || state.phase === 'shooting') {
+      return;
+    }
+    window.AudioPool.stopBgm();
+  }
+
+  function playCoinIntoBonus(times, spanMs) {
+    var n = clamp(times, 1, 6);
+    var i;
+    window.AudioPool.play('collect_coin_in');
+    for (i = 1; i < n; i++) {
+      later(function () {
+        window.AudioPool.play('collect_coin_in');
+      }, Math.round(i * spanMs / n));
+    }
+  }
+
   function collectWin() {
     var gain;
     var fromBonus;
@@ -406,7 +424,7 @@ window.Game = (function () {
     ms = countMs(gain);
     persist();
     window.AudioPool.stopBgm();
-    window.AudioPool.play('C01');
+    playCoinIntoBonus(clamp(Math.ceil(gain / 8), 2, 6), ms);
     window.UI.animateNumber('result', gain, 0, ms, window.UI.renderResult);
     window.UI.animateNumber('bonus', fromBonus, toBonus, ms, window.UI.renderBonus);
     later(function () {
@@ -661,16 +679,17 @@ window.Game = (function () {
 
   function pressGo() {
     window.AudioPool.unlock();
+    hushFinishMusic();
     if (state.phase === 'idle') {
       startSpin();
     } else if (state.phase === 'gamble') {
-      window.AudioPool.stopAll();
       collectWin();
     }
   }
 
   function onButtonDown(id, button) {
     window.AudioPool.unlock();
+    hushFinishMusic();
     window.UI.setPressed(id, true);
     if (id === 'go') {
       pressGo();
@@ -755,6 +774,7 @@ window.Game = (function () {
     if (e.repeat) {
       return;
     }
+    hushFinishMusic();
     if (e.code === 'Space' || e.keyCode === 32) {
       e.preventDefault();
       pressGo();
@@ -781,6 +801,7 @@ window.Game = (function () {
     window.UI.bindControls({
       onDown: onButtonDown,
       onUp: onButtonUp,
+      onAnyDown: hushFinishMusic,
       onCoin: function () { insertCoins(COIN_PACK); },
       onMute: toggleMute
     });
