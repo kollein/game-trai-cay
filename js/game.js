@@ -150,7 +150,7 @@ window.Game = (function () {
         state.muted = data.muted;
       }
       if (typeof data.pendingWin === 'number' && data.pendingWin > 0) {
-        state.credits = clamp(state.credits + Math.floor(data.pendingWin), 0, MAX_CREDIT);
+        state.bonus = clamp(state.bonus + Math.floor(data.pendingWin), 0, MAX_CREDIT);
         state.pendingWin = 0;
       }
     } catch (err) {}
@@ -185,6 +185,16 @@ window.Game = (function () {
   function setPhase(phase) {
     state.phase = phase;
     window.UI.setPhase(phase);
+    refreshControls();
+  }
+
+  function refreshControls() {
+    var idle = state.phase === 'idle';
+    var collect = state.phase === 'gamble';
+    var canMove = idle || collect;
+    window.UI.setEnabled('go', collect || (idle && totalBet() > 0 && state.credits > 0));
+    window.UI.setEnabled('leftBonus', canMove && state.credits > 0);
+    window.UI.setEnabled('rightBonus', canMove && state.bonus > 0);
   }
 
   function computeWin(indices) {
@@ -248,6 +258,7 @@ window.Game = (function () {
     window.UI.renderCredits(state.credits);
     window.UI.renderBet(fruit, state.bets[fruit]);
     persist();
+    refreshControls();
     return true;
   }
 
@@ -268,6 +279,7 @@ window.Game = (function () {
     window.UI.renderCredits(state.credits);
     window.UI.renderBet(fruit, 0);
     persist();
+    refreshControls();
     return true;
   }
 
@@ -275,7 +287,7 @@ window.Game = (function () {
     var i;
     var any = false;
     if (state.phase !== 'idle') {
-      return;
+      return false;
     }
     for (i = 0; i < FRUITS.length; i++) {
       if (changeBet(FRUITS[i], delta)) {
@@ -288,6 +300,7 @@ window.Game = (function () {
     if (any) {
       window.AudioPool.play(delta > 0 ? 'Y208' : 'Y201');
     }
+    return any;
   }
 
   function insertCoins(amount) {
@@ -297,6 +310,7 @@ window.Game = (function () {
     window.UI.renderCredits(state.credits);
     window.AudioPool.play('Y010');
     persist();
+    refreshControls();
   }
 
   function toggleMute() {
@@ -308,16 +322,23 @@ window.Game = (function () {
 
   function stopHold() {
     if (holdTimer != null) {
-      clearInterval(holdTimer);
-      state.intervals = state.intervals.filter(function (t) { return t !== holdTimer; });
+      clearTimeout(holdTimer);
       holdTimer = null;
     }
   }
 
   function startHold(fn) {
+    var delay = 150;
     stopHold();
-    holdTimer = setInterval(fn, 180);
-    state.intervals.push(holdTimer);
+    function tick() {
+      holdTimer = null;
+      if (fn() === false) {
+        return;
+      }
+      delay = Math.max(30, Math.round(delay * 0.84));
+      holdTimer = setTimeout(tick, delay);
+    }
+    holdTimer = setTimeout(tick, delay);
   }
 
   function stopBlink() {
@@ -359,61 +380,62 @@ window.Game = (function () {
     persist();
   }
 
+  function countMs(amount) {
+    return clamp(450 + Math.abs(amount) * 4, 450, 1000);
+  }
+
   function collectWin() {
     var gain;
+    var fromBonus;
+    var toBonus;
+    var ms;
     if (state.phase !== 'gamble') {
       return;
     }
     gain = state.pendingWin;
-    state.credits = clamp(state.credits + gain, 0, MAX_CREDIT);
-    state.bonus = clamp(state.bonus + gain, 0, MAX_CREDIT);
-    state.lastWin = gain;
-    state.pendingWin = 0;
-    window.AudioPool.stopBgm();
-    window.AudioPool.play('C01');
-    window.UI.renderCredits(state.credits);
-    window.UI.renderBonus(state.bonus);
-    window.UI.renderResult(gain);
-    finishRound();
-  }
-
-  function gamble(isBig) {
-    var value;
-    var win;
-    var n;
-    if (state.phase !== 'gamble' || state.pendingWin <= 0) {
+    if (gain <= 0) {
+      finishRound();
       return;
     }
     setPhase('payout');
-    value = randomInt(1, 14);
-    n = 0;
-    function tick() {
-      n += 1;
-      window.UI.renderResult(n < 8 ? randomInt(1, 14) : value);
-      if (n < 8) {
-        later(tick, 70);
-        return;
-      }
-      win = isBig ? value >= 8 : value <= 7;
-      later(function () {
-        if (win) {
-          state.pendingWin = clamp(state.pendingWin * 2, 0, MAX_CREDIT);
-          state.lastWin = state.pendingWin;
-          window.AudioPool.play('Y005');
-          window.UI.animateNumber(value, state.pendingWin, 400, window.UI.renderResult);
-          later(function () {
-            setPhase('gamble');
-          }, 450);
-        } else {
-          state.pendingWin = 0;
-          state.lastWin = 0;
-          window.AudioPool.play('Y016');
-          window.UI.renderResult(0);
-          later(finishRound, 500);
-        }
-      }, 350);
+    fromBonus = state.bonus;
+    toBonus = clamp(fromBonus + gain, 0, MAX_CREDIT);
+    state.bonus = toBonus;
+    state.pendingWin = 0;
+    state.lastWin = 0;
+    ms = countMs(gain);
+    persist();
+    window.AudioPool.stopBgm();
+    window.AudioPool.play('C01');
+    window.UI.animateNumber('result', gain, 0, ms, window.UI.renderResult);
+    window.UI.animateNumber('bonus', fromBonus, toBonus, ms, window.UI.renderBonus);
+    later(function () {
+      finishRound();
+    }, ms + 40);
+  }
+
+  function transferOne(fromBonus) {
+    if (state.phase !== 'idle' && state.phase !== 'gamble') {
+      return false;
     }
-    tick();
+    if (fromBonus) {
+      if (state.bonus < 1) {
+        return false;
+      }
+      state.bonus -= 1;
+      state.credits = clamp(state.credits + 1, 0, MAX_CREDIT);
+    } else {
+      if (state.credits < 1) {
+        return false;
+      }
+      state.credits -= 1;
+      state.bonus = clamp(state.bonus + 1, 0, MAX_CREDIT);
+    }
+    window.UI.renderBonus(state.bonus);
+    window.UI.renderCredits(state.credits);
+    persist();
+    refreshControls();
+    return true;
   }
 
   function payout(indices) {
@@ -431,7 +453,7 @@ window.Game = (function () {
     if (name && RESULT_SOUND[name]) {
       window.AudioPool.play(RESULT_SOUND[name]);
     }
-    window.UI.animateNumber(0, win, 480, window.UI.renderResult);
+    window.UI.animateNumber('result', 0, win, 480, window.UI.renderResult);
     later(function () {
       window.AudioPool.playBgm(FINISH[randomInt(0, FINISH.length - 1)]);
       if (win > 0) {
@@ -618,7 +640,7 @@ window.Game = (function () {
     if (state.phase !== 'idle') {
       return;
     }
-    if (totalBet() <= 0) {
+    if (state.credits < 1 || totalBet() <= 0) {
       window.AudioPool.play('Y016');
       return;
     }
@@ -639,10 +661,10 @@ window.Game = (function () {
 
   function pressGo() {
     window.AudioPool.unlock();
-    window.AudioPool.stopAll();
     if (state.phase === 'idle') {
       startSpin();
     } else if (state.phase === 'gamble') {
+      window.AudioPool.stopAll();
       collectWin();
     }
   }
@@ -654,22 +676,49 @@ window.Game = (function () {
       pressGo();
       return;
     }
-    if (id === 'leftBonus' || id === 'onesix') {
-      gamble(false);
+    if (id === 'leftBonus') {
+      if (transferOne(false)) {
+        window.AudioPool.play('Y201');
+        startHold(function () {
+          if (!transferOne(false)) {
+            return false;
+          }
+          window.AudioPool.play('Y201');
+        });
+      } else {
+        window.AudioPool.play('Y016');
+      }
       return;
     }
-    if (id === 'rightBonus' || id === 'eighthirteen') {
-      gamble(true);
+    if (id === 'rightBonus') {
+      if (transferOne(true)) {
+        window.AudioPool.play('Y208');
+        startHold(function () {
+          if (!transferOne(true)) {
+            return false;
+          }
+          window.AudioPool.play('Y208');
+        });
+      } else {
+        window.AudioPool.play('Y016');
+      }
+      return;
+    }
+    if (id === 'onesix' || id === 'eighthirteen') {
       return;
     }
     if (state.phase !== 'idle') {
       return;
     }
     if (id === 'allplus1') {
+      if (button !== 2 && state.credits < 1) {
+        window.AudioPool.play('Y016');
+        return;
+      }
       (function (delta) {
         allPlus(delta);
         startHold(function () {
-          allPlus(delta);
+          return allPlus(delta);
         });
       }(button === 2 ? -1 : 1));
       return;
@@ -681,13 +730,18 @@ window.Game = (function () {
         }
         return;
       }
+      if (state.credits < 1) {
+        window.AudioPool.play('Y016');
+        return;
+      }
       if (changeBet(id, 1)) {
         window.AudioPool.play(BET_SOUND[id]);
       }
       startHold(function () {
-        if (changeBet(id, 1)) {
-          window.AudioPool.play(BET_SOUND[id]);
+        if (!changeBet(id, 1)) {
+          return false;
         }
+        window.AudioPool.play(BET_SOUND[id]);
       });
     }
   }
@@ -723,6 +777,7 @@ window.Game = (function () {
     window.AudioPool.setMuted(state.muted);
     window.UI.init();
     window.UI.renderAll(state);
+    refreshControls();
     window.UI.bindControls({
       onDown: onButtonDown,
       onUp: onButtonUp,

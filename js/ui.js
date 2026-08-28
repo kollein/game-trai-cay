@@ -80,7 +80,6 @@ window.UI = (function () {
   };
 
   var FRUITS = ['BAR', 'SEVEN', 'STAR', 'WATERMELON', 'BELL', 'MANGO', 'ORGANE', 'APPLE'];
-  var GAMBLE_BTNS = ['leftBonus', 'rightBonus', 'onesix', 'eighthirteen'];
   var BET_BTNS = FRUITS.concat(['allplus1']);
 
   var machine;
@@ -91,7 +90,7 @@ window.UI = (function () {
   var phase = 'idle';
   var pressed = {};
   var enabled = {};
-  var tweenRaf = 0;
+  var tweenRafs = {};
 
   function $(id) {
     return document.getElementById(id);
@@ -187,15 +186,17 @@ window.UI = (function () {
   function setPhase(next) {
     phase = next;
     var idle = next === 'idle';
-    var gamble = next === 'gamble';
+    var collect = next === 'gamble';
+    var canTransfer = idle || collect;
     var i;
     for (i = 0; i < BET_BTNS.length; i++) {
       setEnabled(BET_BTNS[i], idle);
     }
-    for (i = 0; i < GAMBLE_BTNS.length; i++) {
-      setEnabled(GAMBLE_BTNS[i], gamble);
-    }
-    setEnabled('go', idle || gamble);
+    setEnabled('leftBonus', canTransfer);
+    setEnabled('rightBonus', canTransfer);
+    setEnabled('onesix', false);
+    setEnabled('eighthirteen', false);
+    setEnabled('go', idle || collect);
   }
 
   function createButtons() {
@@ -275,15 +276,25 @@ window.UI = (function () {
     });
   }
 
-  function cancelTween() {
-    if (tweenRaf) {
-      cancelAnimationFrame(tweenRaf);
-      tweenRaf = 0;
+  function cancelTween(id) {
+    var key;
+    if (id) {
+      if (tweenRafs[id]) {
+        cancelAnimationFrame(tweenRafs[id]);
+        delete tweenRafs[id];
+      }
+      return;
     }
+    for (key in tweenRafs) {
+      if (Object.prototype.hasOwnProperty.call(tweenRafs, key)) {
+        cancelAnimationFrame(tweenRafs[key]);
+      }
+    }
+    tweenRafs = {};
   }
 
-  function animateNumber(from, to, ms, render) {
-    cancelTween();
+  function animateNumber(id, from, to, ms, render) {
+    cancelTween(id);
     var start = performance.now();
     var span = Math.max(16, ms || 400);
     function frame(now) {
@@ -291,12 +302,12 @@ window.UI = (function () {
       var eased = 1 - Math.pow(1 - p, 3);
       render(Math.round(from + (to - from) * eased));
       if (p < 1) {
-        tweenRaf = requestAnimationFrame(frame);
+        tweenRafs[id] = requestAnimationFrame(frame);
       } else {
-        tweenRaf = 0;
+        delete tweenRafs[id];
       }
     }
-    tweenRaf = requestAnimationFrame(frame);
+    tweenRafs[id] = requestAnimationFrame(frame);
   }
 
   function setLights(indices) {
@@ -439,6 +450,7 @@ window.UI = (function () {
     init: init,
     bindControls: bindControls,
     setPhase: setPhase,
+    setEnabled: setEnabled,
     setPressed: setPressed,
     releaseAll: releaseAll,
     renderBonus: renderBonus,
